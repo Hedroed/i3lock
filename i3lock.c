@@ -1245,8 +1245,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    free(image_path);
-    free(image_raw_format);
+    // free(image_path);
+    // free(image_raw_format);
 
     /* Pixmap on which the image is rendered to (if any) */
     xcb_pixmap_t bg_pixmap = create_bg_pixmap(conn, screen, last_resolution, color);
