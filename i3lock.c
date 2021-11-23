@@ -92,6 +92,9 @@ static uint8_t xkb_base_event;
 static uint8_t xkb_base_error;
 static int randr_base = -1;
 
+struct ev_timer *img_reread_timer = NULL;
+char *image_path = NULL;
+
 cairo_surface_t *img = NULL;
 bool tile = false;
 bool ignore_empty_password = false;
@@ -1004,10 +1007,34 @@ static void raise_loop(xcb_window_t window) {
     }
 }
 
+/* Rereads image from disk */
+void cb_reread_image(EV_P_ ev_timer *w, int revents) {
+    if (image_path && img)
+    {
+    cairo_surface_t *new = cairo_image_surface_create_from_png(image_path);
+    if (cairo_surface_status(new) != CAIRO_STATUS_SUCCESS) {
+        fprintf(stderr, "Could not load image \"%s\": %s\n",
+            image_path, cairo_status_to_string(cairo_surface_status(new)));
+        new = NULL;
+    }
+
+    if (new) {
+        cairo_surface_destroy(img);
+        img = new;
+    }
+    }
+    redraw_screen();
+    STOP_TIMER(img_reread_timer);
+}
+
+void usr1_handle(int sig) {
+    /* Create deferred work */
+    START_TIMER(img_reread_timer, TSTAMP_N_SECS(0.25), cb_reread_image);
+}
+
 int main(int argc, char *argv[]) {
     struct passwd *pw;
     char *username;
-    char *image_path = NULL;
     char *image_raw_format = NULL;
 #ifndef __OpenBSD__
     int ret;
@@ -1218,7 +1245,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    free(image_path);
+    // free(image_path);
     free(image_raw_format);
 
     /* Pixmap on which the image is rendered to (if any) */
@@ -1292,6 +1319,9 @@ int main(int argc, char *argv[]) {
 
     ev_prepare_init(xcb_prepare, xcb_prepare_cb);
     ev_prepare_start(main_loop, xcb_prepare);
+
+    /* Set up handler for SIGUSR1 */
+    signal(SIGUSR1, usr1_handle);
 
     /* Invoke the event callback once to catch all the events which were
      * received up until now. ev will only pick up new events (when the X11
